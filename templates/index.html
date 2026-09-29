@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Waste Classifier - 89.24%</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family: 'Segoe UI', Arial}
+body{background:#f0f4f8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:white;width:100%;max-width:480px;border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,0.1);padding:30px}
+h1{text-align:center;font-size:22px} h1 span{color:#4CAF50}
+.sub{text-align:center;color:#666;font-size:13px;margin:5px 0 20px}
+.drop{border:2px dashed #4CAF50;border-radius:15px;padding:30px;text-align:center;cursor:pointer;transition:0.2s;background:#f9fff9}
+.drop:hover{background:#e8f5e9}
+.drop input{display:none}
+#preview{width:100%;max-height:300px;object-fit:contain;border-radius:12px;margin-top:15px;display:none}
+#result{margin-top:20px;padding:15px;border-radius:12px;display:none;text-align:center}
+.badge{display:inline-block;padding:6px 14px;border-radius:20px;color:white;font-weight:bold;margin-bottom:8px}
+.conf-bar{height:8px;background:#eee;border-radius:4px;margin-top:10px;overflow:hidden}
+.conf-fill{height:100%;background:#4CAF50;width:0%;transition:0.5s}
+.scores{margin-top:15px;text-align:left;font-size:13px}
+.scores div{display:flex;justify-content:space-between;margin:4px 0}
+button.main{width:100%;padding:14px;background:#4CAF50;color:white;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:15px}
+button.main:disabled{background:#ccc}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>♻️ Smart Waste Classifier <br><span>89.24% Accuracy</span></h1>
+<p class="sub">Upload waste image → Get bin in 1 sec</p>
+
+<div class="drop" id="drop" onclick="document.getElementById('file').click()">
+<p id="dropText">📸 Click or Drag & Drop image here</p>
+<input type="file" id="file" accept="image/*">
+<img id="preview">
+</div>
+
+<button class="main" id="btn" onclick="upload()" disabled>Classify Waste</button>
+
+<div id="result"></div>
+<div id="allScores" class="scores"></div>
+</div>
+
+<script>
+const fileInput = document.getElementById('file');
+const preview = document.getElementById('preview');
+const dropText = document.getElementById('dropText');
+const btn = document.getElementById('btn');
+const resultDiv = document.getElementById('result');
+const scoresDiv = document.getElementById('allScores');
+let selectedFile = null;
+
+fileInput.onchange = e => handleFile(e.target.files[0]);
+
+// Drag & drop
+const drop = document.getElementById('drop');
+drop.ondragover = e => {e.preventDefault(); drop.style.background='#c8e6c9';}
+drop.ondragleave = () => drop.style.background='#f9fff9';
+drop.ondrop = e => {e.preventDefault(); drop.style.background='#f9fff9'; handleFile(e.dataTransfer.files[0]);}
+
+function handleFile(f){
+ if(!f) return;
+ selectedFile = f;
+ preview.src = URL.createObjectURL(f);
+ preview.style.display='block';
+ dropText.textContent = f.name;
+ btn.disabled = false;
+ resultDiv.style.display='none';
+ scoresDiv.innerHTML='';
+}
+
+async function upload(){
+ if(!selectedFile){alert('Select image');return;}
+ btn.textContent='Classifying...'; btn.disabled=true;
+ resultDiv.style.display='block';
+ resultDiv.innerHTML='⏳ Predicting...';
+ resultDiv.style.background='#fff3cd';
+
+ const fd = new FormData(); fd.append('file', selectedFile);
+ try{
+  const res = await fetch('/predict', {method:'POST', body:fd});
+  const data = await res.json();
+  if(data.error) throw new Error(data.error);
+
+  const color = data.color; // Use backend color - orange for low confidence
+const badgeText = data.confidence < 75 ? "⚠️ UNCERTAIN" : data.predicted.toUpperCase();
+  resultDiv.style.background = color+'15';
+  resultDiv.innerHTML = `
+   <div class="badge" style="background:${color}">${badgeText}</div>
+   <div style="font-size:22px;font-weight:bold;color:${color}">${data.confidence}% Confidence</div>
+   <div style="margin-top:6px">🗑️ <b>${data.bin}</b><br><small>${data.tip || data.type}</small></div>
+   <div class="conf-bar"><div class="conf-fill" style="width:${data.confidence}%;background:${color}"></div></div>
+  `;
+  // All scores
+  let html='<b>All predictions:</b><br>';
+  Object.entries(data.all).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
+   html+=`<div><span>${k}</span><span>${v}%</span></div>`;
+  });
+  scoresDiv.innerHTML=html;
+ }catch(err){
+  resultDiv.innerHTML='❌ Error: '+err.message; resultDiv.style.background='#ffebee';
+ }
+ btn.textContent='Classify Waste'; btn.disabled=false;
+}
+</script>
+</body>
+</html>
